@@ -1,9 +1,12 @@
 // import React from 'react';
-import Container from '@material-ui/core/Container';
+import { Button, Container } from '@material-ui/core';
 import Card from '@material-ui/core/Card';
 import CardContent from '@material-ui/core/CardContent';
 import { makeStyles } from '@material-ui/core/styles';
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+
+import { Client, ThreadID } from '@textile/hub'
+import { Where } from '@textile/threads-client';
 
 const useStyles = makeStyles({
   root: {
@@ -14,45 +17,88 @@ const useStyles = makeStyles({
   }
 });
 type Link = {
-  id: number,
+  _id: string,
   url: string,
-  // folder: string,
-  notes: string,
-  name: string,
+  comment: string,
+  title: string
 }
 
-export default function App() {
+type Thread = {
+  id: Uint8Array | string,
+  name: string,
+  isdb: boolean
+}
+
+type AppProps = {
+  client: Client,
+  thread: Thread,
+}
+
+export default function App(props: AppProps) {
+  const client = props.client;
+  const thread = props.thread;
   const classes = useStyles();
   const [form, setForm] = useState({
     url: '',
-    // folder: '',
-    notes: '',
-    name: '',
+    comment: '',
+    title: '',
   });
-
   const [links, setLinks] = useState<Link[]>([]);
+  const threadId = ThreadID.fromString(thread.id);
 
-  const addLink = (evt:any) => {
-    evt.preventDefault();
-    
-    setLinks([
-      ...links,
-      {
-        id: links.length,
-        url: form.url,
-        // folder: form.folder,
-        notes: form.notes,
-        name: form.name,
+  const getAllLinks = async() => {
+    const query = new Where('_id').ne('');
+    const request =  await client.find(threadId, 'Links', query);
+    var links = request.instancesList.map((instance: any) => {
+      var link:Link = {
+        _id: instance._id,
+        url: instance.url,
+        comment: instance.comment,
+        title: instance.title
       }
+      return link;
+    });
+    setLinks(links);
+  }
+
+  useEffect(() => {
+    getAllLinks();
+  }, [links]);
+
+  const addLink = async (evt:any) => {
+    evt.preventDefault();
+    var newLink = {
+      _id: '',
+      url: form.url,
+      comment: form.comment,
+      title: form.title,
+    };
+    
+    await client.create(threadId, 'Links', [newLink]);
+
+     setLinks([
+      ...links,
+     newLink
     ]);
 
     setForm({
       url: '',
-      // folder: '',
-      notes: '',
-      name: '',
-    })
+      comment: '',
+      title: '',
+    });
   };
+
+  const deleteLink = async (id:any) => {
+    
+    await client.delete(threadId, 'Links', [id]);
+
+    var updatedLinks = links.filter((item) => { return item._id !== id });
+    console.log(updatedLinks);
+    setLinks(updatedLinks);
+
+  }
+
+
 
   return (
     <Container >
@@ -60,8 +106,8 @@ export default function App() {
         <CardContent>
           <form>
             <label>
-              Name:
-              <input type="text" name="name" value={form.name} onChange={e => setForm({...form, name: e.target.value})}/>
+              Title:
+              <input type="text" name="title" value={form.title} onChange={e => setForm({...form, title: e.target.value})}/>
             </label>
             <br/>
             <label>
@@ -69,14 +115,9 @@ export default function App() {
               <input type="text" name="url" value={form.url} onChange={e => setForm({...form, url: e.target.value})}/>
             </label>
             <br/>
-            {/* <label>
-              Folder:
-              <input type="text" name="folder" value={form.folder} onChange={e => setForm({...form, folder: e.target.value})}/>
-            </label>
-            <br/> */}
             <label>
-              Notes:
-              <input type="text" name="notes" value={form.notes} onChange={e => setForm({...form, notes: e.target.value})}/>
+              Comment:
+              <input type="text" name="comment" value={form.comment} onChange={e => setForm({...form, comment: e.target.value})}/>
             </label>
             <br/>
             <button onClick={addLink}>Submit</button>
@@ -88,10 +129,11 @@ export default function App() {
           <CardContent>
             {links.slice(0).reverse().map((item, key) => (
               <Card className={classes.root} key={key}>
+                <Button onClick={() => deleteLink(item._id)}>Delete</Button>
                 <CardContent>
-                  name: {item.name}<br/>
-                  url: <a href={item.url} target="_blank">{item.url}</a><br/>
-                  notes: {item.notes}<br/>
+                  title: {item.title}<br/>
+                  url: <a href={item.url} target="_blank" rel="noopener noreferrer">{item.url}</a><br/>
+                  comment: {item.comment}<br/>
                 </CardContent>
               </Card>
             ))}
